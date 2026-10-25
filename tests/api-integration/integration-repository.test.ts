@@ -190,6 +190,65 @@ describe("repository binding service", () => {
     );
   });
 
+  it("updates the existing binding in place when a repository is renamed", async () => {
+    const { workspace } = await createWorkspaceMember();
+    const { project } = await createProjectFixture({
+      workspaceId: workspace.id,
+    });
+    const integration = await seedGithubIntegration(project.id, {
+      repositoryOwner: "old-owner",
+      repositoryName: "old-name",
+      repositoryId: 42,
+      installationId: 7,
+    });
+
+    await upsertPrimaryBinding(integration.id, {
+      repositoryOwner: "old-owner",
+      repositoryName: "old-name",
+      repositoryId: 42,
+      installationId: 7,
+    });
+    const [original] = await db.query.integrationRepositoryTable.findMany();
+    // Attach a link to the original binding; it must survive the rename.
+    const [task] = await db
+      .insert(schema.taskTable)
+      .values({ projectId: project.id, title: "Task", number: 1 })
+      .returning();
+    const [link] = await db
+      .insert(schema.externalLinkTable)
+      .values({
+        taskId: task.id,
+        integrationId: integration.id,
+        integrationRepositoryId: original.id,
+        resourceType: "issue",
+        externalId: "1",
+        url: "https://github.com/old-owner/old-name/issues/1",
+      })
+      .returning();
+
+    // Same numeric repository ID, new owner/name (rename or transfer).
+    await upsertPrimaryBinding(integration.id, {
+      repositoryOwner: "new-owner",
+      repositoryName: "renamed",
+      repositoryId: 42,
+      installationId: 7,
+    });
+
+    const bindings = await db.query.integrationRepositoryTable.findMany();
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({
+      id: original.id,
+      repositoryOwner: "new-owner",
+      repositoryName: "renamed",
+      repositoryId: 42,
+      isPrimary: true,
+    });
+    const attached = await db.query.externalLinkTable.findFirst({
+      where: eq(schema.externalLinkTable.id, link.id),
+    });
+    expect(attached?.integrationRepositoryId).toBe(original.id);
+  });
+
   it("returns undefined when an integration has no binding", async () => {
     const { workspace } = await createWorkspaceMember();
     const { project } = await createProjectFixture({
@@ -233,6 +292,52 @@ describe("create GitHub integration writes a binding", () => {
       repositoryName: "repo",
       repositoryId: 2,
       installationId: 1,
+      isPrimary: true,
+    });
+  });
+
+  it("reconnecting a renamed repository updates the same binding", async () => {
+    const { user, workspace } = await createWorkspaceMember({ role: "admin" });
+    const { project } = await createProjectFixture({
+      workspaceId: workspace.id,
+    });
+    const binding = {
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+      repositoryId: 2,
+      installationId: 1,
+      verifiedGithubAccountId: "3",
+      verifiedByUserId: user.id,
+    };
+    verify.mockResolvedValue(binding);
+    const created = await createIntegration({
+      userId: user.id,
+      projectId: project.id,
+      repositoryOwner: "owner",
+      repositoryName: "repo",
+    });
+    const [original] = await db.query.integrationRepositoryTable.findMany();
+
+    verify.mockResolvedValue({
+      ...binding,
+      repositoryOwner: "new-owner",
+      repositoryName: "renamed",
+    });
+    const reconnected = await createIntegration({
+      userId: user.id,
+      projectId: project.id,
+      repositoryOwner: "new-owner",
+      repositoryName: "renamed",
+    });
+
+    expect(reconnected.id).toBe(created.id);
+    const bindings = await db.query.integrationRepositoryTable.findMany();
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({
+      id: original.id,
+      repositoryOwner: "new-owner",
+      repositoryName: "renamed",
+      repositoryId: 2,
       isPrimary: true,
     });
   });

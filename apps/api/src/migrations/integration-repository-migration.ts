@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db from "../database";
 import {
   dataMigrationTable,
@@ -6,6 +6,7 @@ import {
   integrationRepositoryTable,
   integrationTable,
 } from "../database/schema";
+import { upsertPrimaryBinding } from "../plugins/github/services/repository-bindings";
 
 const COMPLETION_ID = "integration-repository-v1";
 
@@ -88,43 +89,10 @@ export async function migrateIntegrationRepositories() {
     for (const integration of integrations) {
       const binding = bindingFromConfig(integration.config);
       if (!binding) continue;
-      await tx
-        .insert(integrationRepositoryTable)
-        .values({
-          integrationId: integration.id,
-          repositoryOwner: binding.repositoryOwner,
-          repositoryName: binding.repositoryName,
-          repositoryId: binding.repositoryId,
-          installationId: binding.installationId,
-          verifiedGithubAccountId: binding.verifiedGithubAccountId,
-          verifiedByUserId: binding.verifiedByUserId,
-          isPrimary: true,
-        })
-        .onConflictDoNothing({
-          target: [
-            integrationRepositoryTable.integrationId,
-            integrationRepositoryTable.repositoryOwner,
-            integrationRepositoryTable.repositoryName,
-          ],
-        });
       // Reuse an existing binding (e.g. one created by the app before this
-      // migration first ran) and make sure it is the primary.
-      await tx
-        .update(integrationRepositoryTable)
-        .set({ isPrimary: true })
-        .where(
-          and(
-            eq(integrationRepositoryTable.integrationId, integration.id),
-            eq(
-              integrationRepositoryTable.repositoryOwner,
-              binding.repositoryOwner,
-            ),
-            eq(
-              integrationRepositoryTable.repositoryName,
-              binding.repositoryName,
-            ),
-          ),
-        );
+      // migration first ran), resolving by numeric repository ID so a
+      // repository renamed since then updates in place.
+      await upsertPrimaryBinding(integration.id, binding, tx);
     }
 
     await tx.execute(sql`
