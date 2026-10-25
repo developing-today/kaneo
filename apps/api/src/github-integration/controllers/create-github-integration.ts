@@ -7,6 +7,7 @@ import {
   defaultGitHubConfig,
   githubConfigSchema,
 } from "../../plugins/github/config";
+import { upsertPrimaryBinding } from "../../plugins/github/services/repository-bindings";
 import { verifyRepositoryOwner } from "./verify-repository-owner";
 
 async function createGithubIntegration({
@@ -92,6 +93,8 @@ async function createGithubIntegration({
         message: "GitHub integration changed; refresh before reconnecting",
       });
 
+    await upsertPrimaryBinding(updatedIntegration.id, config);
+
     return {
       id: updatedIntegration.id,
       projectId: updatedIntegration?.projectId,
@@ -114,6 +117,10 @@ async function createGithubIntegration({
       isActive: true,
     })
     .returning();
+
+  if (newIntegration) {
+    await upsertPrimaryBinding(newIntegration.id, config);
+  }
 
   return {
     id: newIntegration?.id,

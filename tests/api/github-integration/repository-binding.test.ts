@@ -20,14 +20,23 @@ vi.mock("../../../apps/api/src/database", () => ({
         findFirst: async () => null,
         findMany: m.integrations,
       },
+      integrationRepositoryTable: {
+        findMany: async () => [],
+      },
     },
     insert: () => ({
       values: (data: unknown) => {
         m.insert(data);
         return {
           returning: async () => [{ id: "integration", projectId: "project" }],
+          onConflictDoNothing: async () => {},
         };
       },
+    }),
+    update: () => ({
+      set: () => ({
+        where: async () => [],
+      }),
     }),
   },
 }));

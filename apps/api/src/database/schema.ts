@@ -1056,6 +1056,54 @@ export const integrationTable = pgTable(
   ],
 );
 
+export const integrationRepositoryTable = pgTable(
+  "integration_repository",
+  {
+    id: text("id")
+      .$defaultFn(() => createId())
+      .primaryKey(),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integrationTable.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    repositoryOwner: text("repository_owner").notNull(),
+    repositoryName: text("repository_name").notNull(),
+    repositoryId: integer("repository_id"),
+    installationId: integer("installation_id"),
+    verifiedGithubAccountId: text("verified_github_account_id"),
+    verifiedByUserId: text("verified_by_user_id"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .default(utcNow)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .default(utcNow)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("integration_repository_integrationId_idx").on(table.integrationId),
+    index("integration_repository_repositoryId_idx").on(table.repositoryId),
+    index("integration_repository_owner_name_idx").on(
+      table.repositoryOwner,
+      table.repositoryName,
+    ),
+    unique("integration_repository_integration_owner_name_unique").on(
+      table.integrationId,
+      table.repositoryOwner,
+      table.repositoryName,
+    ),
+    uniqueIndex("integration_repository_integration_repositoryId_unique")
+      .on(table.integrationId, table.repositoryId)
+      .where(sql`${table.repositoryId} is not null`),
+    uniqueIndex("integration_repository_primary_unique")
+      .on(table.integrationId)
+      .where(sql`${table.isPrimary}`),
+  ],
+);
+
 export const githubImportTable = pgTable("github_import", {
   integrationId: text("integration_id")
     .primaryKey()
@@ -1130,6 +1178,13 @@ export const externalLinkTable = pgTable(
         onUpdate: "cascade",
       },
     ),
+    integrationRepositoryId: text("integration_repository_id").references(
+      () => integrationRepositoryTable.id,
+      {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      },
+    ),
     resourceType: text("resource_type").notNull(),
     externalId: text("external_id").notNull(),
     url: text("url").notNull(),
@@ -1146,6 +1201,9 @@ export const externalLinkTable = pgTable(
   (table) => [
     index("external_link_taskId_idx").on(table.taskId),
     index("external_link_integrationId_idx").on(table.integrationId),
+    index("external_link_integrationRepositoryId_idx").on(
+      table.integrationRepositoryId,
+    ),
     index("external_link_externalId_idx").on(table.externalId),
     index("external_link_resourceType_idx").on(table.resourceType),
     index("external_link_deferred_issue_idx")
