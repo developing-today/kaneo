@@ -10,6 +10,7 @@ import {
   customFieldValueTable,
   externalLinkTable,
   githubIntegrationTable,
+  integrationRepositoryTable,
   integrationTable,
   invitationTable,
   labelTable,
@@ -340,6 +341,18 @@ export const integrationTableRelations = relations(
       fields: [integrationTable.projectId],
       references: [projectTable.id],
     }),
+    repositories: many(integrationRepositoryTable),
+    externalLinks: many(externalLinkTable),
+  }),
+);
+
+export const integrationRepositoryTableRelations = relations(
+  integrationRepositoryTable,
+  ({ one, many }) => ({
+    integration: one(integrationTable, {
+      fields: [integrationRepositoryTable.integrationId],
+      references: [integrationTable.id],
+    }),
     externalLinks: many(externalLinkTable),
   }),
 );
@@ -370,6 +383,10 @@ export const externalLinkTableRelations = relations(
     integration: one(integrationTable, {
       fields: [externalLinkTable.integrationId],
       references: [integrationTable.id],
+    }),
+    repository: one(integrationRepositoryTable, {
+      fields: [externalLinkTable.integrationRepositoryId],
+      references: [integrationRepositoryTable.id],
     }),
   }),
 );

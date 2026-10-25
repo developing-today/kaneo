@@ -26,8 +26,14 @@ vi.mock("../../../apps/api/src/database", () => ({
         m.insert(data);
         return {
           returning: async () => [{ id: "integration", projectId: "project" }],
+          onConflictDoNothing: async () => {},
         };
       },
+    }),
+    update: () => ({
+      set: () => ({
+        where: async () => [],
+      }),
     }),
   },
 }));
